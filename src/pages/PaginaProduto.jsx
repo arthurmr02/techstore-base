@@ -1,8 +1,21 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
+import ProdutoCard from '../components/ProdutoCard'
+import { produtoVendavel, temPrecoValido, valorParaFreteGratis } from '../utils/carrinho'
+import { formatarPreco } from '../utils/formatarPreco'
 
-export default function PaginaProduto({ produtos, onAdicionar }) {
+export default function PaginaProduto({
+  produtos,
+  clienteAtual,
+  listaEspera = [],
+  onAdicionar,
+  onRegistrarListaEspera,
+}) {
   const { id } = useParams()
   const produto = produtos.find((item) => item.id === id)
+  const [nome, setNome] = useState(clienteAtual?.nome || '')
+  const [email, setEmail] = useState(clienteAtual?.email || '')
+  const [mensagemEspera, setMensagemEspera] = useState('')
 
   if (!produto) {
     return (
@@ -16,8 +29,44 @@ export default function PaginaProduto({ produtos, onAdicionar }) {
   }
 
   const relacionados = produtos
-    .filter((item) => item.category === produto.category && item.id !== produto.id)
+    .filter(
+      (item) =>
+        item.category === produto.category &&
+        item.id !== produto.id &&
+        produtoVendavel(item)
+    )
     .slice(0, 4)
+
+  const produtoDisponivel = produtoVendavel(produto)
+  const restanteParaFrete = valorParaFreteGratis(produto.price)
+  const indicadorFrete = temPrecoValido(produto)
+    ? restanteParaFrete === 0
+      ? 'Frete grátis liberado'
+      : `Faltam ${formatarPreco(restanteParaFrete)} para ganhar frete grátis`
+    : 'Frete grátis indisponível'
+  const jaNaListaEspera = listaEspera.some(
+    (item) => item.produtoId === produto.id && item.email.toLowerCase() === email.trim().toLowerCase()
+  )
+
+  function enviarListaEspera(evento) {
+    evento.preventDefault()
+
+    const nomeFormatado = nome.trim()
+    const emailFormatado = email.trim()
+
+    if (!nomeFormatado || !emailFormatado) {
+      setMensagemEspera('Informe nome e e-mail para receber o aviso.')
+      return
+    }
+
+    if (jaNaListaEspera) {
+      setMensagemEspera('Você já está na fila para receber o aviso desse produto.')
+      return
+    }
+
+    onRegistrarListaEspera(produto.id, { nome: nomeFormatado, email: emailFormatado })
+    setMensagemEspera('Você está na fila para receber o aviso quando o produto voltar.')
+  }
 
   return (
     <section>
@@ -37,17 +86,59 @@ export default function PaginaProduto({ produtos, onAdicionar }) {
           <p className="card-avaliacao">
             ★ {produto.rating.rate} <span>({produto.rating.count} avaliações)</span>
           </p>
-          <p className="detalhe-preco">R$ {produto.price.toFixed(2).replace('.', ',')}</p>
+          <p className="detalhe-preco">
+            {temPrecoValido(produto) ? `R$ ${Number(produto.price).toFixed(2).replace('.', ',')}` : 'Preço indisponível'}
+          </p>
           <p className="detalhe-descricao">{produto.description}</p>
-          <p className="detalhe-estoque">{produto.estoque} unidades disponíveis</p>
+          <p className="detalhe-estoque">
+            {produtoDisponivel ? `${produto.estoque} unidades disponíveis` : 'Produto indisponível no momento'}
+          </p>
+          {temPrecoValido(produto) && (
+            <p className={restanteParaFrete === 0 ? 'selo selo-frete' : 'selo selo-alerta'}>
+              {indicadorFrete}
+            </p>
+          )}
 
-          <button
-            className="botao botao-grande"
-            onClick={() => onAdicionar(produto)}
-            disabled={produto.estoque === 0}
-          >
-            Adicionar ao carrinho
-          </button>
+          {!produtoDisponivel && (
+            <form className="lista-espera-form" onSubmit={enviarListaEspera}>
+              <label htmlFor="nome-lista-espera">Nome</label>
+              <input
+                id="nome-lista-espera"
+                type="text"
+                value={nome}
+                onChange={(evento) => setNome(evento.target.value)}
+                placeholder="Seu nome"
+              />
+
+              <label htmlFor="email-lista-espera">E-mail</label>
+              <input
+                id="email-lista-espera"
+                type="email"
+                value={email}
+                onChange={(evento) => setEmail(evento.target.value)}
+                placeholder="seu@email.com"
+              />
+
+              <button
+                type="submit"
+                className="botao botao-grande botao-secundario"
+                disabled={jaNaListaEspera}
+              >
+                {jaNaListaEspera ? 'Já está na lista' : 'Avisar quando voltar'}
+              </button>
+              {mensagemEspera && <p className="mensagem-cupom">{mensagemEspera}</p>}
+            </form>
+          )}
+
+          {produtoDisponivel && (
+            <button
+              className="botao botao-grande"
+              onClick={() => onAdicionar(produto)}
+              disabled={!produtoDisponivel}
+            >
+              Adicionar ao carrinho
+            </button>
+          )}
 
           <ul className="detalhe-garantias">
             <li>Troca grátis em até 30 dias</li>
@@ -59,18 +150,7 @@ export default function PaginaProduto({ produtos, onAdicionar }) {
       <h2>Produtos relacionados</h2>
       <div className="grade">
         {relacionados.map((item) => (
-          <article key={item.id} className="card">
-            <Link to={`/produto/${item.id}`} className="card-link">
-              <div className="card-imagem-moldura">
-                <img src={item.image} alt={item.title} className="card-imagem" />
-              </div>
-              <h3 className="card-titulo">{item.title}</h3>
-            </Link>
-            <p className="preco">R$ {Number(item.price).toFixed(2).replace('.', ',')}</p>
-            <button className="botao" onClick={() => onAdicionar(item)}>
-              Adicionar ao carrinho
-            </button>
-          </article>
+          <ProdutoCard key={item.id} produto={item} onAdicionar={onAdicionar} />
         ))}
       </div>
     </section>

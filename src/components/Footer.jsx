@@ -31,7 +31,7 @@ export default function Footer({ clientes, clienteAtualId, onTrocarCliente }) {
           Cliente de teste
           <select
             value={clienteAtualId || ''}
-            onChange={(evento) => onTrocarCliente(evento.target.value)}
+            onChange={(evento) => onTrocarCliente(Number(evento.target.value))}
           >
             {clientes.map((cliente) => (
               <option key={cliente.id} value={cliente.id}>

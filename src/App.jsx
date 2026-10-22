@@ -9,6 +9,7 @@ import Carrinho from './pages/Carrinho'
 import Estoque from './pages/Estoque'
 import { buscarProdutos } from './services/produtos'
 import { buscarClientes } from './services/clientes'
+import { produtoVendavel } from './utils/carrinho'
 
 export default function App() {
   const [produtos, setProdutos] = useState([])
@@ -17,8 +18,18 @@ export default function App() {
   const [carrinho, setCarrinho] = useState([])
   const [clientes, setClientes] = useState([])
   const [clienteAtualId, setClienteAtualId] = useState(null)
+  const [listaEspera, setListaEspera] = useState([])
 
   useEffect(() => {
+    const itensSalvos = localStorage.getItem('techstore-lista-espera')
+    if (itensSalvos) {
+      try {
+        setListaEspera(JSON.parse(itensSalvos))
+      } catch {
+        setListaEspera([])
+      }
+    }
+
     buscarProdutos()
       .then((dados) => setProdutos(dados))
       .catch(() => setErro('Não foi possível carregar os produtos.'))
@@ -30,15 +41,23 @@ export default function App() {
     })
   }, [])
 
+  useEffect(() => {
+    localStorage.setItem('techstore-lista-espera', JSON.stringify(listaEspera))
+  }, [listaEspera])
+
   function adicionarAoCarrinho(produto) {
-    setCarrinho(carrinho.concat(produto))
+    if (!produtoVendavel(produto)) {
+      return
+    }
+
+    setCarrinho((carrinhoAtual) => carrinhoAtual.concat(produto))
   }
 
   function removerUmaUnidade(produtoId) {
     // Remove só a primeira unidade encontrada do produto
     let removido = false
-    setCarrinho(
-      carrinho.filter((produto) => {
+    setCarrinho((carrinhoAtual) =>
+      carrinhoAtual.filter((produto) => {
         if (!removido && produto.id === produtoId) {
           removido = true
           return false
@@ -48,7 +67,34 @@ export default function App() {
     )
   }
 
-  const clienteAtual = clientes.find((cliente) => cliente.id === clienteAtualId)
+  function registrarListaEspera(produtoId, dadosCliente) {
+    if (!produtoId || !dadosCliente?.nome || !dadosCliente?.email) {
+      return
+    }
+
+    setListaEspera((atual) => {
+      const jaCadastrado = atual.some(
+        (item) => item.produtoId === produtoId && item.email === dadosCliente.email
+      )
+
+      if (jaCadastrado) {
+        return atual
+      }
+
+      return [
+        ...atual,
+        {
+          produtoId,
+          nome: dadosCliente.nome,
+          email: dadosCliente.email,
+        },
+      ]
+    })
+  }
+
+  const clienteAtual = clientes.find(
+    (cliente) => String(cliente.id) === String(clienteAtualId)
+  )
 
   return (
     <div className="app">
@@ -67,7 +113,15 @@ export default function App() {
             />
             <Route
               path="/produto/:id"
-              element={<PaginaProduto produtos={produtos} onAdicionar={adicionarAoCarrinho} />}
+              element={
+                <PaginaProduto
+                  produtos={produtos}
+                  clienteAtual={clienteAtual}
+                  listaEspera={listaEspera}
+                  onAdicionar={adicionarAoCarrinho}
+                  onRegistrarListaEspera={registrarListaEspera}
+                />
+              }
             />
             <Route
               path="/carrinho"
@@ -81,7 +135,7 @@ export default function App() {
                 />
               }
             />
-            <Route path="/estoque" element={<Estoque produtos={produtos} />} />
+            <Route path="/estoque" element={<Estoque produtos={produtos} listaEspera={listaEspera} />} />
           </Routes>
         )}
       </main>
